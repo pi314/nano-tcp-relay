@@ -3,6 +3,8 @@ import re
 import threading
 import socket
 
+thread_pool = []
+
 def print_usage():
     print('Usage:', file=sys.stderr)
     print('    {} host port1 port2 ...'.format(sys.argv[0]), file=sys.stderr)
@@ -35,39 +37,61 @@ def parse_args(args):
 
     return ret
 
-def listening_thread(host, port):
-    print(host, port)
-    s = socket.socket()
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    s.bind(('', port))
-    print('Start listening at {}'.format(port))
-    s.listen(5)
-    while True:
-        client, addr = s.accept()
-        info = {
-            'host': host,
-            'port': port,
-            'client-addr': addr[0],
-            'client-port': addr[1],
-        }
-        print('{a[0]}:{a[1]} <-> {h}:{p} opened'.format(a=addr, h=host, p=port))
-        try:
-            relay = socket.socket()
-            relay.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            relay.connect((host, port))
-            t = threading.Thread(target=connection_thread, args=(client, relay))
-            t.daemon = True
-            t.start()
-            t = threading.Thread(target=connection_thread, args=(relay, client))
-            t.daemon = True
-            t.start()
-        except ConnectionRefusedError:
-            client.close()
-            relay.close()
+class ListeningThread(threading.Thread):
+    def __init__(self, host, port):
+        threading.Thread.__init__(self)
+        self.daemon = True
+        self.host = host
+        self.port = port
+        self.socket = None
+        self.run_permission = True
 
-def connection_thread(f, t):
-    from_info = f.getsockname()
-    to_info = t.getsockname()
+    def run(self):
+        self.socket = socket.socket()
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.socket.bind(('', self.port))
+        print('Start listening at {}'.format(self.port))
+        self.socket.listen(5)
+        try:
+            while self.run_permission:
+                client, addr = self.socket.accept()
+                info = {
+                    'host': self.host,
+                    'port': self.port,
+                    'client-addr': addr[0],
+                    'client-port': addr[1],
+                }
+                print('{a[0]}:{a[1]} <-> {h}:{p} opened'.format(a=addr, h=self.host, p=self.port))
+                try:
+                    relay = socket.socket()
+                    relay.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    relay.connect((self.host, self.port))
+                    th = threading.Thread(target=connection_thread, args=(client, relay))
+                    th.daemon = True
+                    th.start()
+                    th = threading.Thread(target=connection_thread, args=(relay, client))
+                    th.daemon = True
+                    th.start()
+                except ConnectionRefusedError:
+                    client.close()
+                    relay.close()
+                    print('{a[0]}:{a[1]} <-> {h}:{p} closed'.format(a=addr, h=self.host, p=self.port))
+
+        except (InterruptedError, ConnectionAbortedError):
+            for th in thread_pool:
+                th.stop()
+
+    def stop(self):
+        self.run_permission = False
+        try:
+            self.socket.shutdown(socket.SHUT_RDWR)
+            self.socket.close()
+        except OSError:
+            pass
+
+def connection_thread(fr, to):
+    from_info = fr.getpeername()
+    to_info = to.getpeername()
     info = {
         'from-addr': from_info[0],
         'from-port': from_info[1],
@@ -76,27 +100,31 @@ def connection_thread(f, t):
     }
     try:
         while True:
-            data = f.recv(1024)
+            data = fr.recv(1024)
             if len(data) <= 0:
                 break
-            t.sendall(data)
-    except ConnectionResetError:
-        pass
-    except OSError:
+            to.sendall(data)
+    except (ConnectionResetError, OSError):
         pass
     finally:
-        f.close()
-        t.close()
+        to.shutdown(socket.SHUT_RDWR)
+        to.close()
         print('{from-addr}:{from-port} -> {to-addr}:{to-port} closed'.format(**info))
 
 def main():
+    global thread_pool
     config = parse_args(sys.argv)
     for p in config['ports']:
-        t = threading.Thread(target=listening_thread, args=(config['host'], p))
-        t.daemon = True
-        t.start()
+        th = ListeningThread(config['host'], p)
+        th.daemon = True
+        th.start()
+        thread_pool.append(th)
 
-    while True: input()
+    try:
+        for th in thread_pool:
+            th.join()
+    except KeyboardInterrupt:
+        pass
 
 if __name__ == '__main__':
     main()
