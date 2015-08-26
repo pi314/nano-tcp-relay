@@ -32,7 +32,7 @@ Usage
   - ``$ nano-tcp-relay {host} {relay-port-1} [{relay-port-2} ... {relay-port-n}]``
   - Works as following ::
 
-    Internet ---> localhost:{relay-port-1} ---> {host}:{relay-port-1}
-    Internet ---> localhost:{relay-port-2} ---> {host}:{relay-port-2}
-    ...
-    Internet ---> localhost:{relay-port-n} ---> {host}:{relay-port-n}
+      Internet ---> localhost:{relay-port-1} ---> {host}:{relay-port-1}
+      Internet ---> localhost:{relay-port-2} ---> {host}:{relay-port-2}
+      ...
+      Internet ---> localhost:{relay-port-n} ---> {host}:{relay-port-n}
