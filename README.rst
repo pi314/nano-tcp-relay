@@ -29,10 +29,10 @@ Usage
 
 * Relay many TCP ports
 
-  - ``$ nano-tcp-relay {host} {relay-port-1} [{relay-port-2} ... {relay-port-n}]``
+  - ``$ nano-tcp-relay {host} {port-1} [{port-2} ... {port-n}]``
   - Works as following ::
 
-      Internet ---> localhost:{relay-port-1} ---> {host}:{relay-port-1}
-      Internet ---> localhost:{relay-port-2} ---> {host}:{relay-port-2}
+      Internet ---> localhost:{port-1} ---> {host}:{port-1}
+      Internet ---> localhost:{port-2} ---> {host}:{port-2}
       ...
-      Internet ---> localhost:{relay-port-n} ---> {host}:{relay-port-n}
+      Internet ---> localhost:{port-n} ---> {host}:{port-n}
