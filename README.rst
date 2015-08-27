@@ -38,7 +38,7 @@ Usage
       ...
       Internet ---> localhost:{port-n} ---> {host}:{port-n}
 
-* Relay and port forwarding ::
+* Port forwarding ::
 
     $ nano-tcp-relay {host} {src-port-1}-{dst-port-1} [{src-port-2}-{dst-port-2} ...]
 
