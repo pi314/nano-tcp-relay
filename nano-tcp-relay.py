@@ -153,6 +153,7 @@ def connection_thread(fr, to):
             data = fr.recv(1024)
             if len(data) <= 0:
                 break
+            print('[data  ] {fr-addr}:{fr-port} --{fr-local-port}--{to-local-port}--> {to-addr}:{to-port} ({count})'.format(count=len(data), **info))
             to.sendall(data)
 
         close_socket(fr)
