@@ -5,6 +5,7 @@ import threading
 import socket
 
 thread_pool = []
+EX_USAGE = 64   # man sysexits
 
 def print_usage():
     print('Usage:', file=sys.stderr)
@@ -23,11 +24,15 @@ def invalid_port(p):
 
 
 def parse_args(args):
+    if len(args) < 3:
+        print_usage()
+        exit(EX_USAGE)
+
     ret = {}
     if not re.match(r'^([0-9a-zA-Z]+)(\.[0-9a-zA-Z]+)*$', args[1]):
         print_error_message('Invalid host: {}'.format(args[1]))
         print_usage()
-        exit(64)    # EX_USAGE, ``man sysexit``
+        exit(EX_USAGE)
 
     ret['host'] = args[1]
 
@@ -36,13 +41,13 @@ def parse_args(args):
         m = re.match(r'^(\d+)(?:-(\d+))?$', i)
         if m is None:
             print_error_message('Invalid port number: {}'.format(i))
-            exit(64)
+            exit(EX_USAGE)
 
         p = m.groups()
         p = (int(p[0]), int(p[0] if p[1] is None else p[1]))
         if invalid_port(p[0]) or invalid_port(p[1]):
             print_error_message('Invalid port number: {}'.format(i))
-            exit(64)
+            exit(EX_USAGE)
 
         ret['ports'].append(p)
 
