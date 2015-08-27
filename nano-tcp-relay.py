@@ -12,8 +12,10 @@ def print_usage():
     print('    host: IP address or host name', file=sys.stderr)
     print('    port: TCP port number', file=sys.stderr)
 
+
 def print_error_message(msg):
     print(msg, file=sys.stderr)
+
 
 def parse_args(args):
     ret = {}
@@ -36,6 +38,7 @@ def parse_args(args):
         exit(64)
 
     return ret
+
 
 class ListeningThread(threading.Thread):
     def __init__(self, host, port):
@@ -89,6 +92,7 @@ class ListeningThread(threading.Thread):
         except OSError:
             pass
 
+
 def connection_thread(fr, to):
     from_info = fr.getpeername()
     to_info = to.getpeername()
@@ -111,6 +115,7 @@ def connection_thread(fr, to):
         to.close()
         print('{from-addr}:{from-port} -> {to-addr}:{to-port} closed'.format(**info))
 
+
 def main():
     global thread_pool
     config = parse_args(sys.argv)
@@ -125,6 +130,7 @@ def main():
             th.join()
     except KeyboardInterrupt:
         pass
+
 
 if __name__ == '__main__':
     main()
