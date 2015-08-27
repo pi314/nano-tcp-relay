@@ -27,12 +27,24 @@ Some times I need to relay TCP connections through some machines, and this can b
 Usage
 -----
 
-* Relay many TCP ports
+* Transparently relay TCP ports ::
 
-  - ``$ nano-tcp-relay {host} {port-1} [{port-2} ... {port-n}]``
+    $ nano-tcp-relay {host} {port-1} [{port-2} ... {port-n}]
+
   - Works as following ::
 
       Internet ---> localhost:{port-1} ---> {host}:{port-1}
       Internet ---> localhost:{port-2} ---> {host}:{port-2}
       ...
       Internet ---> localhost:{port-n} ---> {host}:{port-n}
+
+* Relay and port forwarding ::
+
+    $ nano-tcp-relay {host} {src-port-1}-{dst-port-1} [{src-port-2}-{dst-port-2} ...]
+
+  - Works as following ::
+
+      Internet --> localhost:{src-port-1} ---> {host}:{dst-port-1}
+      Internet --> localhost:{src-port-2} ---> {host}:{dst-port-2}
+      ...
+      Internet --> localhost:{src-port-n} ---> {host}:{dst-port-n}
