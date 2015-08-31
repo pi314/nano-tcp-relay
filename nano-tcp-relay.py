@@ -4,8 +4,18 @@ import re
 import threading
 import socket
 
-thread_pool = []
 EX_USAGE = 64   # man sysexits
+EX_SOFTWARE = 70
+
+if sys.version_info[0] < 3:
+    print('Python2 is not supported.')
+    exit(EX_SOFTWARE)
+
+thread_pool = []
+
+def process_command(cmd):
+    print('[', cmd, ']')
+
 
 def print_usage():
     print('Usage:', file=sys.stderr)
@@ -50,6 +60,10 @@ def parse_args(args):
             exit(EX_USAGE)
 
         ret['ports'].append(p)
+
+    if ret['host'] in ('localhost', '127.0.0.1'):
+        print_error_message('Localhost infinite loop is dangerous')
+        exit(EX_USAGE)
 
     return ret
 
@@ -183,9 +197,10 @@ def main():
         thread_pool.append(th)
 
     try:
-        for th in thread_pool:
-            th.join()
-    except KeyboardInterrupt:
+        while True:
+            process_command(input().strip())
+
+    except (KeyboardInterrupt, EOFError):
         pass
 
 
