@@ -13,8 +13,39 @@ if sys.version_info[0] < 3:
 
 thread_pool = []
 
+print_quiet = False
+
+def log_info(*args, **kargs):
+    if not print_quiet:
+        print(*args, **kargs)
+
+
+def print_internal_command_usage():
+    print('[cmd] Internal command usage')
+    print('h: stop output and print this usage (alias: empty line)')
+    print('p: start output')
+    print('l: list current relaying ports')
+    print('')
+    print('Current destination host: {}'.format(config['host']))
+
+
 def process_command(cmd):
-    print('[', cmd, ']')
+    global print_quiet
+    print_quiet = True
+    cmd = cmd.strip()
+    if cmd in ('', 'h'):
+        print_internal_command_usage()
+        print('> ', end='')
+
+    elif cmd in ('p',):
+        print_quiet = False
+        print('[cmd] start print')
+
+    elif cmd in ('l',):
+        for i in config['ports']:
+            print('{}-{}'.format(*i))
+
+        print('> ', end='')
 
 
 def print_usage():
@@ -26,7 +57,7 @@ def print_usage():
 
 
 def print_error_message(msg):
-    print(msg, file=sys.stderr)
+    log_info(msg, file=sys.stderr)
 
 
 def invalid_port(p):
@@ -62,8 +93,9 @@ def parse_args(args):
         ret['ports'].append(p)
 
     if ret['host'] in ('localhost', '127.0.0.1'):
-        print_error_message('Localhost infinite loop is dangerous')
-        exit(EX_USAGE)
+        if any(map(lambda x: x[0] == x[1], ret['ports'])):
+            print_error_message('Localhost infinite loop is dangerous')
+            exit(EX_USAGE)
 
     return ret
 
@@ -81,7 +113,7 @@ class ListeningThread(threading.Thread):
         self.socket = socket.socket()
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.socket.bind(('', self.ports[0]))
-        print('[listen] {} (--> {})'.format(*self.ports))
+        log_info('[listen] {} (--> {})'.format(*self.ports))
         self.socket.listen(5)
         try:
             while self.run_permission:
@@ -91,7 +123,7 @@ class ListeningThread(threading.Thread):
                     relay.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                     relay.connect((self.host, self.ports[1]))
                     info = get_connection_info(client, relay)
-                    print('[opened] {client-addr}:{client-port} <--{listen-port}--{out-going-port}--> {remote-addr}:{remote-port}'.format(**info))
+                    log_info('[opened] {client-addr}:{client-port} <--{listen-port}--{out-going-port}--> {remote-addr}:{remote-port}'.format(**info))
                     th = threading.Thread(target=connection_thread, args=(client, relay))
                     th.daemon = True
                     th.start()
@@ -102,7 +134,7 @@ class ListeningThread(threading.Thread):
                     client_info = client.getpeername()
                     client.close()
                     relay.close()
-                    print('[failed] {ch}:{cp} --> {h}:{p}'.format(
+                    log_info('[failed] {ch}:{cp} --> {h}:{p}'.format(
                         ch=client_info[0], cp=client_info[1],
                         h=self.host, p=self.ports[1]
                     ))
@@ -167,7 +199,7 @@ def connection_thread(fr, to):
             data = fr.recv(1024)
             if len(data) <= 0:
                 break
-            print('[data  ] {fr-addr}:{fr-port} --{fr-local-port}--{to-local-port}--> {to-addr}:{to-port} ({count})'.format(count=len(data), **info))
+            log_info('[data  ] {fr-addr}:{fr-port} --{fr-local-port}--{to-local-port}--> {to-addr}:{to-port} ({count})'.format(count=len(data), **info))
             to.sendall(data)
 
         close_socket(fr)
@@ -179,7 +211,7 @@ def connection_thread(fr, to):
     finally:
         close_socket(fr)
         close_socket(to)
-        print('[closed] {fr-addr}:{fr-port} --{fr-local-port}--{to-local-port}--> {to-addr}:{to-port}'.format(**info))
+        log_info('[closed] {fr-addr}:{fr-port} --{fr-local-port}--{to-local-port}--> {to-addr}:{to-port}'.format(**info))
 
 
 def main():
@@ -189,6 +221,7 @@ def main():
     #   'host': host,
     #   'ports': [(src, dst), ...]
     # }
+    global config
     config = parse_args(sys.argv)
     for p in config['ports']:
         th = ListeningThread(config['host'], p)
@@ -198,7 +231,7 @@ def main():
 
     try:
         while True:
-            process_command(input().strip())
+            process_command(input())
 
     except (KeyboardInterrupt, EOFError):
         pass
