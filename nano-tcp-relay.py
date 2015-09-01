@@ -22,15 +22,20 @@ def log_info(*args, **kargs):
 
 def print_internal_command_usage():
     print('[cmd] Internal command usage')
-    print('h: stop output and print this usage (alias: empty line)')
-    print('p: start output')
-    print('l: list current relaying ports')
+    print('h       : stop output and print this usage (alias: empty line)')
+    print('p       : start output')
+    print('l       : list current relaying ports')
+    print('a <port>: add relaying port')
+    print('d <port>: remove relaying port')
     print('')
     print('Current destination host: {}'.format(config['host']))
 
 
 def process_command(cmd):
     global print_quiet
+    global thread_pool
+    global config
+
     print_quiet = True
     cmd = cmd.strip()
     if cmd in ('', 'h'):
@@ -44,6 +49,54 @@ def process_command(cmd):
     elif cmd in ('l',):
         for i in config['ports']:
             print('{}-{}'.format(*i))
+
+        print('> ', end='')
+
+    else:
+        cmd = cmd.split()
+        if len(cmd) < 2:
+            print('Lack of argument: port')
+            print('> ', end='')
+            return
+
+        m = re.match(r'^(\d+)(?:-(\d+))?$', cmd[1])
+        if m is None:
+            print('Invalid port number: {}'.format(cmd[1]))
+            print('> ', end='')
+            return
+
+        p = m.groups()
+
+        if cmd[0] in ('a',):
+            p = (int(p[0]), int(p[0] if p[1] is None else p[1]))
+            if invalid_port(p[0]) or invalid_port(p[1]):
+                print('Invalid port number: {}'.format(cmd[1]))
+                print('> ', end='')
+                return
+
+            config['ports'].append(p)
+            th = ListeningThread(config['host'], p)
+            th.daemon = True
+            th.start()
+            thread_pool.append(th)
+            for i in config['ports']:
+                print('{}-{}'.format(*i))
+
+        elif cmd[0] in ('d',):
+            if p[1] is not None:
+                print('Delete command only accepts one port number, not a port pair')
+                print('> ', end='')
+                return
+
+            p = int(p[0])
+            for th in thread_pool:
+                if th.ports[0] == p:
+                    th.stop()
+
+            config['ports'] = list(filter(lambda x: x[0] != p, config['ports']))
+
+            for i in config['ports']:
+                print('{}-{}'.format(*i))
 
         print('> ', end='')
 
