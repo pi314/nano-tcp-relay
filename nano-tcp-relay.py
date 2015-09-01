@@ -123,7 +123,7 @@ def parse_args(args):
         exit(EX_USAGE)
 
     ret = {}
-    if not re.match(r'^([0-9a-zA-Z]+)(\.[0-9a-zA-Z]+)*$', args[1]):
+    if not re.match(r'^([0-9a-zA-Z-]+)(\.[0-9a-zA-Z-]+)*$', args[1]):
         print_error_message('Invalid host: {}'.format(args[1]))
         print_usage()
         exit(EX_USAGE)
