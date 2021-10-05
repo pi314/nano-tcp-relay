@@ -25,15 +25,17 @@ def log_info(*args, **kargs):
 
 
 def print_internal_command_usage():
-    print('[cmd] Internal command usage')
-    print('h       : stop output and print this usage (alias: empty line)')
-    print('p       : start output')
-    print('l       : list current relaying ports')
-    print('a <port>: add relaying port')
-    print('d <port>: remove relaying port')
-    print('q       : quit')
-    print('')
-    print('Current destination host: {}'.format(config['host']))
+    print(dedent(f'''\
+        [cmd] Internal command usage
+        h       : stop output and print this usage (alias: empty line)
+        p       : start output
+        l       : list current relaying ports
+        a <port>: add relaying port
+        d <port>: remove relaying port
+        q       : quit
+
+        Current destination host: {config["host"]}
+    '''))
 
 
 def process_command(cmd):
