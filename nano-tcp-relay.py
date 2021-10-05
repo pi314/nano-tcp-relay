@@ -30,6 +30,7 @@ def print_internal_command_usage():
     print('l       : list current relaying ports')
     print('a <port>: add relaying port')
     print('d <port>: remove relaying port')
+    print('q       : quit')
     print('')
     print('Current destination host: {}'.format(config['host']))
 
