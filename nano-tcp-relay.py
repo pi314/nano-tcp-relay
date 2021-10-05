@@ -4,6 +4,7 @@ import select
 import signal
 import socket
 import sys
+from textwrap import dedent
 import threading
 import time
 
@@ -109,11 +110,16 @@ def process_command(cmd):
 
 
 def print_usage():
-    print('Usage:', file=sys.stderr)
-    print('    {} host port1 port2 ...'.format(sys.argv[0]), file=sys.stderr)
-    print('', file=sys.stderr)
-    print('    host: IP address or host name', file=sys.stderr)
-    print('    port: TCP port number', file=sys.stderr)
+    command = sys.argv[0]
+    print(dedent(f'''\
+        Usage:
+            {command} host [ports] ...
+
+        host:             IP address or host name to forward to
+        ports:
+            number        Forward a single TCP port to the same destination port
+            local-remote: Forward traffic from a local port to a different remote port
+    '''), file=sys.stderr)
 
 
 def print_error_message(msg):
