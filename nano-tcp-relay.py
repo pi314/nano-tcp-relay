@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-import sys
 import re
-import threading
+import select
+import signal
 import socket
+import sys
+from textwrap import dedent
+import threading
+import time
 
 EX_USAGE = 64   # man sysexits
 EX_SOFTWARE = 70
@@ -21,14 +25,17 @@ def log_info(*args, **kargs):
 
 
 def print_internal_command_usage():
-    print('[cmd] Internal command usage')
-    print('h       : stop output and print this usage (alias: empty line)')
-    print('p       : start output')
-    print('l       : list current relaying ports')
-    print('a <port>: add relaying port')
-    print('d <port>: remove relaying port')
-    print('')
-    print('Current destination host: {}'.format(config['host']))
+    print(dedent(f'''\
+        [cmd] Internal command usage
+        h       : stop output and print this usage (alias: empty line)
+        p       : start output
+        l       : list current relaying ports
+        a <port>: add relaying port
+        d <port>: remove relaying port
+        q       : quit
+
+        Current destination host: {config["host"]}
+    '''))
 
 
 def process_command(cmd):
@@ -40,7 +47,16 @@ def process_command(cmd):
     cmd = cmd.strip()
     if cmd in ('', 'h'):
         print_internal_command_usage()
-        print('> ', end='')
+        return
+
+    elif cmd in ('q',):
+        # closing threads takes time
+        # if we just return they will still be alive and we'll end up back here
+        # instead, we should do a join before we return
+        close_threads()
+        for th in thread_pool:
+            th.join()
+        return
 
     elif cmd in ('p',):
         print_quiet = False
@@ -50,19 +66,17 @@ def process_command(cmd):
         for i in config['ports']:
             print('{}-{}'.format(*i))
 
-        print('> ', end='')
+        return
 
     else:
         cmd = cmd.split()
         if len(cmd) < 2:
             print('Lack of argument: port')
-            print('> ', end='')
             return
 
         m = re.match(r'^(\d+)(?:-(\d+))?$', cmd[1])
         if m is None:
             print('Invalid port number: {}'.format(cmd[1]))
-            print('> ', end='')
             return
 
         p = m.groups()
@@ -71,7 +85,6 @@ def process_command(cmd):
             p = (int(p[0]), int(p[0] if p[1] is None else p[1]))
             if invalid_port(p[0]) or invalid_port(p[1]):
                 print('Invalid port number: {}'.format(cmd[1]))
-                print('> ', end='')
                 return
 
             config['ports'].append(p)
@@ -85,7 +98,6 @@ def process_command(cmd):
         elif cmd[0] in ('d',):
             if p[1] is not None:
                 print('Delete command only accepts one port number, not a port pair')
-                print('> ', end='')
                 return
 
             p = int(p[0])
@@ -98,15 +110,18 @@ def process_command(cmd):
             for i in config['ports']:
                 print('{}-{}'.format(*i))
 
-        print('> ', end='')
-
 
 def print_usage():
-    print('Usage:', file=sys.stderr)
-    print('    {} host port1 port2 ...'.format(sys.argv[0]), file=sys.stderr)
-    print('', file=sys.stderr)
-    print('    host: IP address or host name', file=sys.stderr)
-    print('    port: TCP port number', file=sys.stderr)
+    command = sys.argv[0]
+    print(dedent(f'''\
+        Usage:
+            {command} host [ports] ...
+
+        host:             IP address or host name to forward to
+        ports:
+            number        Forward a single TCP port to the same destination port
+            local-remote: Forward traffic from a local port to a different remote port
+    '''), file=sys.stderr)
 
 
 def print_error_message(msg):
@@ -115,7 +130,6 @@ def print_error_message(msg):
 
 def invalid_port(p):
     return p <= 0 or p > 65535
-
 
 def parse_args(args):
     if len(args) < 3:
@@ -170,7 +184,13 @@ class ListeningThread(threading.Thread):
         self.socket.listen(5)
         try:
             while self.run_permission:
-                client, addr = self.socket.accept()
+                try:
+                    client, addr = self.socket.accept()
+                except OSError:
+                    # the socket was killed before we got a connection
+                    self.stop()
+                    break
+
                 try:
                     relay = socket.socket()
                     relay.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -193,8 +213,7 @@ class ListeningThread(threading.Thread):
                     ))
 
         except (InterruptedError, ConnectionAbortedError):
-            for th in thread_pool:
-                th.stop()
+            self.stop()
 
     def stop(self):
         self.run_permission = False
@@ -236,6 +255,11 @@ def close_socket(sock):
         pass
 
 
+def close_threads():
+    global thread_pool
+    for th in thread_pool:
+        th.stop()
+
 def connection_thread(fr, to):
     from_info = fr.getpeername()
     to_info = to.getpeername()
@@ -267,7 +291,45 @@ def connection_thread(fr, to):
         log_info('[closed] {fr-addr}:{fr-port} --{fr-local-port}--{to-local-port}--> {to-addr}:{to-port}'.format(**info))
 
 
+def signal_handler(*args, **kwargs):
+    close_threads()
+
+
+def threads_alive():
+    return any(map(lambda th: th.is_alive(), thread_pool))
+
+if sys.platform == 'win32':
+    import msvcrt
+    def get_user_input():
+        while threads_alive():
+            if msvcrt.kbhit():
+                return input()
+            time.sleep(0.1)
+else:
+    def get_user_input():
+        # avoid issues with select blocking forever and ignoring ctrl+c in python 3.6
+        # by setting a timeout and looping
+        while threads_alive():
+            # only call input if we have input waiting for us
+            # otherwise we break ctrl+c due to threading
+            i, o, e = select.select([sys.stdin], [], [], 0.1)
+            if i:
+                return input()
+
+def user_input():
+    # due to use not using an endline, this doesn't always print
+    # so force a flush
+    print('COMMAND> ', end='')
+    sys.stdout.flush()
+    return get_user_input()
+
 def main():
+    # on windows we need to explicitly add signal handlers
+    # due to an side-effect of the threading causing signals (ctrl+c)
+    # to be eaten and not be passed to the application
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
     global thread_pool
     # config format:
     # {
@@ -282,9 +344,14 @@ def main():
         th.start()
         thread_pool.append(th)
 
+    # let the threads startup and print before we print out our prompt
+    time.sleep(0.1)
+
     try:
-        while True:
-            process_command(input())
+        while threads_alive():
+            i = user_input()
+            if i:
+                process_command(i)
 
     except (KeyboardInterrupt, EOFError):
         pass
